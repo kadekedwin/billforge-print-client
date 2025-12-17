@@ -237,15 +237,58 @@ class BluetoothClassic {
         console.log('Disconnecting from device:', address);
     }
 
+    async processDataWithDelays(address, data) {
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        const chunks = [];
+        let currentChunk = [];
+        let i = 0;
+
+        while (i < buffer.length) {
+            if (i + 3 < buffer.length &&
+                buffer[i] === 0x1B &&
+                buffer[i + 1] === 0x7E &&
+                buffer[i + 2] === 0x44) {
+
+                if (currentChunk.length > 0) {
+                    chunks.push({ type: 'data', buffer: Buffer.from(currentChunk) });
+                    currentChunk = [];
+                }
+                const delayMs = buffer[i + 3];
+                chunks.push({ type: 'delay', duration: delayMs });
+                i += 4;
+            } else {
+                currentChunk.push(buffer[i]);
+                i++;
+            }
+        }
+
+        if (currentChunk.length > 0) {
+            chunks.push({ type: 'data', buffer: Buffer.from(currentChunk) });
+        }
+
+        return chunks;
+    }
+
     async sendData(address, data) {
         try {
             if (!this.connections.has(address)) {
                 throw new Error('Device not connected');
             }
 
-            const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+            const chunks = await this.processDataWithDelays(address, data);
+            let totalBytesSent = 0;
 
-            return { success: true, bytesSent: buffer.length };
+            for (const chunk of chunks) {
+                if (chunk.type === 'data') {
+                    totalBytesSent += chunk.buffer.length;
+                    console.log(`Sent ${chunk.buffer.length} bytes to ${address}`);
+                } else if (chunk.type === 'delay') {
+                    console.log(`Delaying ${chunk.duration}ms`);
+                    await new Promise(resolve => setTimeout(resolve, chunk.duration));
+                }
+            }
+
+            return { success: true, bytesSent: totalBytesSent };
         } catch (error) {
             throw new Error(`Send failed: ${error.message}`);
         }

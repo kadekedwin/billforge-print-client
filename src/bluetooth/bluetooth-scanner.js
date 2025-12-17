@@ -125,6 +125,40 @@ class BluetoothScanner {
         });
     }
 
+    async processDataWithDelays(data) {
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        const chunks = [];
+        let currentChunk = [];
+        let i = 0;
+
+        while (i < buffer.length) {
+            if (i + 3 < buffer.length &&
+                buffer[i] === 0x1B &&
+                buffer[i + 1] === 0x7E &&
+                buffer[i + 2] === 0x44) {
+
+                if (currentChunk.length > 0) {
+                    chunks.push({ type: 'data', buffer: Buffer.from(currentChunk) });
+                    currentChunk = [];
+                }
+
+                const delayMs = buffer[i + 3];
+                chunks.push({ type: 'delay', duration: delayMs });
+                i += 4;
+            } else {
+                currentChunk.push(buffer[i]);
+                i++;
+            }
+        }
+
+        // Add remaining data
+        if (currentChunk.length > 0) {
+            chunks.push({ type: 'data', buffer: Buffer.from(currentChunk) });
+        }
+
+        return chunks;
+    }
+
     async sendData(deviceId, data) {
         const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
         const peripheral = this.connectedPeripherals.get(peripheralId);
@@ -132,31 +166,44 @@ class BluetoothScanner {
             throw new Error('Device not connected');
         }
 
-        return new Promise((resolve, reject) => {
-            peripheral.discoverAllServicesAndCharacteristics((error, services, characteristics) => {
-                if (error) {
-                    return reject(new Error(`Failed to discover services: ${error.message}`));
-                }
+        const chunks = await this.processDataWithDelays(data);
+        let totalBytesSent = 0;
 
-                const writableChar = characteristics.find(char =>
-                    char.properties.includes('write') || char.properties.includes('writeWithoutResponse')
-                );
+        for (const chunk of chunks) {
+            if (chunk.type === 'delay') {
+                console.log(`Delaying ${chunk.duration}ms`);
+                await new Promise(resolve => setTimeout(resolve, chunk.duration));
+            } else if (chunk.type === 'data') {
+                await new Promise((resolve, reject) => {
+                    peripheral.discoverAllServicesAndCharacteristics((error, services, characteristics) => {
+                        if (error) {
+                            return reject(new Error(`Failed to discover services: ${error.message}`));
+                        }
 
-                if (!writableChar) {
-                    return reject(new Error('No writable characteristic found'));
-                }
+                        const writableChar = characteristics.find(char =>
+                            char.properties.includes('write') || char.properties.includes('writeWithoutResponse')
+                        );
 
-                const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-                const useWriteWithoutResponse = writableChar.properties.includes('writeWithoutResponse');
+                        if (!writableChar) {
+                            return reject(new Error('No writable characteristic found'));
+                        }
 
-                writableChar.write(buffer, useWriteWithoutResponse, (error) => {
-                    if (error) {
-                        return reject(new Error(`Failed to write data: ${error.message}`));
-                    }
-                    resolve({ success: true, bytesSent: buffer.length });
+                        const useWriteWithoutResponse = writableChar.properties.includes('writeWithoutResponse');
+
+                        writableChar.write(chunk.buffer, useWriteWithoutResponse, (error) => {
+                            if (error) {
+                                return reject(new Error(`Failed to write data: ${error.message}`));
+                            }
+                            totalBytesSent += chunk.buffer.length;
+                            console.log(`Sent ${chunk.buffer.length} bytes to ${peripheralId}`);
+                            resolve();
+                        });
+                    });
                 });
-            });
-        });
+            }
+        }
+
+        return { success: true, bytesSent: totalBytesSent };
     }
 
     getConnectedDevices() {
