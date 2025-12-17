@@ -4,7 +4,7 @@ Send raw data to Bluetooth printers via WebSocket.
 
 ## Connection
 
-**WebSocket URL:** `ws://127.0.0.1:42123` (or your network IP)
+**WebSocket URL:** `ws://127.0.0.1:42123`
 
 ## Basic Usage
 
@@ -33,7 +33,6 @@ Send raw data to Bluetooth printers via WebSocket.
 **Convert text to bytes in JavaScript:**
 ```javascript
 const bytes = Array.from(new TextEncoder().encode("Hello"));
-// [72, 101, 108, 108, 111]
 ```
 
 ## ESC/POS Commands
@@ -55,10 +54,6 @@ const bytes = Array.from(new TextEncoder().encode("Hello"));
 Add pauses between commands for slower printers or before cuts.
 
 **Syntax:** `[27, 126, 68, duration]`
-- `27` = ESC
-- `126` = ~
-- `68` = D
-- `duration` = milliseconds (0-255)
 
 **Example:**
 ```json
@@ -67,11 +62,11 @@ Add pauses between commands for slower printers or before cuts.
   "payload": {
     "deviceId": "YOUR_DEVICE_ID",
     "data": [
-      27, 64,           // Initialize
-      84, 101, 115, 116, // "Test"
-      10, 10,           // 2 line feeds
-      27, 126, 68, 200, // Wait 200ms
-      29, 86, 66, 0     // Cut
+      27, 64,
+      84, 101, 115, 116,
+      10, 10,
+      27, 126, 68, 200,
+      29, 86, 66, 0
     ]
   }
 }
@@ -108,19 +103,51 @@ ws.onmessage = (event) => {
       payload: {
         deviceId: msg.data.deviceId,
         data: [
-          27, 64,              // Initialize
-          27, 97, 1,           // Center
-          27, 69, 1,           // Bold on
-          82, 101, 99, 101, 105, 112, 116, // "Receipt"
-          27, 69, 0,           // Bold off
-          10, 10,              // 2 line feeds
-          27, 126, 68, 100,    // Wait 100ms
-          29, 86, 66, 0        // Cut
+          27, 64,
+          27, 97, 1,
+          27, 69, 1,
+          82, 101, 99, 101, 105, 112, 116,
+          27, 69, 0,
+          10, 10,
+          27, 126, 68, 100,
+          29, 86, 66, 0
         ]
       }
     }));
   }
 };
+```
+
+## Printing Images
+
+Thermal printers use bitmap format (`GS v 0`).
+
+### Requirements
+- **Width**: Max 384 pixels
+- **Format**: Any format
+- **Colors**: Black/white (threshold)
+
+### Print Image Example
+```javascript
+const canvas = document.getElementById('myCanvas');
+const ctx = canvas.getContext('2d');
+const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+const bitmapData = imageToBitmap(imageData);
+
+ws.send(JSON.stringify({
+  type: 'send_data',
+  payload: {
+    deviceId: 'YOUR_DEVICE_ID',
+    data: [
+      27, 64,
+      27, 97, 1,
+      ...bitmapData,
+      10, 10,
+      29, 86, 66, 0
+    ]
+  }
+}));
 ```
 
 ## WebSocket API

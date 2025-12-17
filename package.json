@@ -6,7 +6,18 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --inspect",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "app.billforge.print.client",
+    "productName": "Billforge Print Client",
+    "files": [
+      "**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
   },
   "keywords": [
     "bluetooth",
@@ -18,7 +29,8 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^39.2.7"
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-26",
