@@ -52,9 +52,14 @@ Triggers Bluetooth device discovery dialog.
 ```json
 {
   "type": "discover",
-  "payload": {}
+  "payload": {
+    "ignoreUnknown": false
+  }
 }
 ```
+
+**Payload Options:**
+- `ignoreUnknown` (optional, boolean): If `true`, filters out devices named "Unknown Device" from results. Default: `false`
 
 **Response:**
 ```json
@@ -204,7 +209,11 @@ const api = new BluetoothAPI('ws://localhost:42123');
 
 await api.connect();
 
+// Discover all devices (including unknown)
 await api.discoverDevices();
+
+// Discover only named devices (ignore "Unknown Device")
+await api.discoverDevices({ ignoreUnknown: true });
 
 const devices = await api.getConnectedDevices();
 

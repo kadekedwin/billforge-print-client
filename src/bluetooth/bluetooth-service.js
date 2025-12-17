@@ -49,7 +49,13 @@ class BluetoothService {
                 console.error('BLE scan error:', error.message);
             }
 
+            const ignoreUnknown = filters.ignoreUnknown || false;
+
             this.bleDevices.forEach((device, id) => {
+                if (ignoreUnknown && device.name === 'Unknown Device') {
+                    return;
+                }
+
                 devices.push({
                     id,
                     name: device.name,
@@ -61,6 +67,10 @@ class BluetoothService {
             });
 
             this.classicDevices.forEach((device, id) => {
+                if (ignoreUnknown && device.name === 'Unknown Device') {
+                    return;
+                }
+
                 devices.push({
                     id,
                     name: device.name,
@@ -71,7 +81,8 @@ class BluetoothService {
                 });
             });
 
-            console.log(`Returning ${devices.length} total devices`);
+            const filteredCount = ignoreUnknown ? ` (${devices.length} after filtering)` : '';
+            console.log(`Returning ${devices.length} total devices${filteredCount}`);
             return { success: true, devices };
         } catch (error) {
             console.error('Discovery error:', error);

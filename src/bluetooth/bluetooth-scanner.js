@@ -92,7 +92,6 @@ class BluetoothScanner {
                 console.log(`Successfully connected to ${peripheral.advertisement.localName || peripheralId}`);
                 this.connectedPeripherals.set(peripheralId, peripheral);
 
-                // Handle disconnect events
                 peripheral.once('disconnect', () => {
                     console.log(`Device ${peripheralId} disconnected`);
                     this.connectedPeripherals.delete(peripheralId);
