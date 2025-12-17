@@ -209,10 +209,8 @@ const api = new BluetoothAPI('ws://localhost:42123');
 
 await api.connect();
 
-// Discover all devices (including unknown)
 await api.discoverDevices();
 
-// Discover only named devices (ignore "Unknown Device")
 await api.discoverDevices({ ignoreUnknown: true });
 
 const devices = await api.getConnectedDevices();
