@@ -7,7 +7,10 @@ class BluetoothService {
         this.classicDevices = new Map();
         this.connectedDevices = new Map();
         this.bluetoothClassic = new BluetoothClassic();
-        this.bluetoothScanner = new BluetoothScanner();
+        this.bluetoothScanner = new BluetoothScanner((deviceId) => {
+            console.log(`Removing disconnected device: ${deviceId}`);
+            this.connectedDevices.delete(deviceId);
+        });
     }
 
     async discoverDevices(filters = {}) {

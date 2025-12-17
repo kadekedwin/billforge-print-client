@@ -1,11 +1,12 @@
 const noble = require('@abandonware/noble');
 
 class BluetoothScanner {
-    constructor() {
+    constructor(onDisconnect = null) {
         this.discoveredDevices = new Map();
         this.peripherals = new Map();
         this.connectedPeripherals = new Map();
         this.scanning = false;
+        this.onDisconnect = onDisconnect;
     }
 
     async startScan(duration = 5000) {
@@ -95,6 +96,9 @@ class BluetoothScanner {
                 peripheral.once('disconnect', () => {
                     console.log(`Device ${peripheralId} disconnected`);
                     this.connectedPeripherals.delete(peripheralId);
+                    if (this.onDisconnect) {
+                        this.onDisconnect(`ble_${peripheralId}`);
+                    }
                 });
 
                 resolve({ success: true, deviceId: peripheralId });
