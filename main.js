@@ -46,7 +46,7 @@ function createTrayMenu() {
     {
       label: 'BillForge Print Client',
       enabled: false,
-      icon: nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 16, height: 16 })
+      icon: nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray-icon.png')).resize({ width: 16, height: 16 })
     },
     { type: 'separator' },
     {
@@ -90,10 +90,13 @@ function createTrayMenu() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'icon.png');
+  const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
   const icon = nativeImage.createFromPath(iconPath);
+  console.log('Icon path:', iconPath);
+  console.log('Icon loaded:', !icon.isEmpty());
 
   const resizedIcon = icon.resize({ width: 22, height: 22 });
+  resizedIcon.setTemplateImage(true);
 
   tray = new Tray(resizedIcon);
   tray.setToolTip('BillForge Print Client');

@@ -17,6 +17,15 @@
     ],
     "directories": {
       "output": "dist"
+    },
+    "mac": {
+      "icon": "assets/icon.png"
+    },
+    "win": {
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "icon": "assets/icon.png"
     }
   },
   "keywords": [
