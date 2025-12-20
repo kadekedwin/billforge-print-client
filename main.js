@@ -8,17 +8,7 @@ let tray = null;
 
 let isServerRunning = true;
 
-function getLocalIPAddress() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
+
 
 function toggleServer() {
   if (isServerRunning) {
@@ -38,9 +28,8 @@ function toggleServer() {
 }
 
 function createTrayMenu() {
-  const ipAddress = getLocalIPAddress();
   const port = 42123;
-  const wsUrl = `ws://${ipAddress}:${port}`;
+  const wsUrl = `ws://127.0.0.1:${port}`;
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -119,7 +108,7 @@ app.whenReady().then(() => {
   createTray();
 
   console.log('BillForge Print Client running in system tray');
-  console.log(`WebSocket server: ws://${getLocalIPAddress()}:42123`);
+  console.log('WebSocket server: ws://127.0.0.1:42123');
 });
 
 app.on('window-all-closed', () => {

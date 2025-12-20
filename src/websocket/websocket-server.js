@@ -27,7 +27,10 @@ class WebSocketServer {
     }
 
     start() {
-        this.wss = new WebSocket.Server({ port: this.port });
+        this.wss = new WebSocket.Server({
+            host: '127.0.0.1',
+            port: this.port
+        });
 
         this.wss.on('connection', (ws) => {
             console.log('Client connected');

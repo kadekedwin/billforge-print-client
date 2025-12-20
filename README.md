@@ -147,7 +147,7 @@ Automatically sent to all clients when a device disconnects:
 ### JavaScript Example
 
 ```javascript
-const ws = new WebSocket('ws://192.168.1.100:42123');
+const ws = new WebSocket('ws://127.0.0.1:42123');
 
 ws.onopen = () => {
   ws.send(JSON.stringify({
@@ -186,7 +186,7 @@ ws.onmessage = (event) => {
 ### Using the API Wrapper
 
 ```javascript
-const api = new BluetoothAPI('ws://192.168.1.100:42123');
+const api = new BluetoothAPI('ws://127.0.0.1:42123');
 
 await api.connect();
 

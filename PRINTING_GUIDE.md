@@ -5,7 +5,7 @@ Complete guide for printing to Bluetooth thermal printers via WebSocket.
 ## Connection
 
 ```javascript
-const ws = new WebSocket('ws://192.168.1.100:42123');
+const ws = new WebSocket('ws://127.0.0.1:42123');
 ```
 
 ## Data Formats
@@ -86,7 +86,7 @@ Recommended: 100-200ms before cutting.
 ## Complete Receipt Example
 
 ```javascript
-const ws = new WebSocket('ws://192.168.1.100:42123');
+const ws = new WebSocket('ws://127.0.0.1:42123');
 
 ws.onopen = () => {
   ws.send(JSON.stringify({ type: 'discover' }));
