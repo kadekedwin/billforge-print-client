@@ -91,10 +91,11 @@ function createTrayMenu() {
 
 function createTray() {
   const iconFileName = process.platform === 'win32' ? 'icon.png' : 'tray-icon.png';
+  const iconSize = process.platform === 'win32' ? 32 : 24;
   const iconPath = path.join(__dirname, 'assets', iconFileName);
   const icon = nativeImage.createFromPath(iconPath);
 
-  const resizedIcon = icon.resize({ width: 32, height: 32 });
+  const resizedIcon = icon.resize({ width: iconSize, height: iconSize });
 
   tray = new Tray(resizedIcon);
   tray.setToolTip('BillForge Print Client');
