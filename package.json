@@ -19,13 +19,16 @@
       "output": "dist"
     },
     "mac": {
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "target": "dmg"
     },
     "win": {
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "target": "nsis"
     },
     "linux": {
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "target": ["AppImage", "deb", "rpm"]
     }
   },
   "keywords": [
@@ -34,7 +37,7 @@
     "websocket",
     "electron"
   ],
-  "author": "",
+  "author": "kadekedwin <kadekedwin12@gmail.com>",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
