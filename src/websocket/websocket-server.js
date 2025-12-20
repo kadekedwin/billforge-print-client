@@ -5,7 +5,25 @@ class WebSocketServer {
     constructor(port = 42123) {
         this.port = port;
         this.wss = null;
-        this.bluetoothService = new BluetoothService();
+        this.clients = new Set();
+        this.bluetoothService = new BluetoothService((deviceId) => {
+            this.broadcastDisconnect(deviceId);
+        });
+    }
+
+    broadcastDisconnect(deviceId) {
+        const message = JSON.stringify({
+            type: 'device_disconnected',
+            data: { deviceId }
+        });
+
+        this.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(message);
+            }
+        });
+
+        console.log(`Broadcasted disconnect event for device: ${deviceId}`);
     }
 
     start() {
@@ -13,6 +31,7 @@ class WebSocketServer {
 
         this.wss.on('connection', (ws) => {
             console.log('Client connected');
+            this.clients.add(ws);
 
             ws.on('message', async (message) => {
                 try {
@@ -29,6 +48,7 @@ class WebSocketServer {
 
             ws.on('close', () => {
                 console.log('Client disconnected');
+                this.clients.delete(ws);
             });
 
             ws.send(JSON.stringify({

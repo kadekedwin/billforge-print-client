@@ -2,14 +2,24 @@ const BluetoothClassic = require('./bluetooth-classic');
 const BluetoothScanner = require('./bluetooth-scanner');
 
 class BluetoothService {
-    constructor() {
+    constructor(onDisconnect = null) {
         this.bleDevices = new Map();
         this.classicDevices = new Map();
         this.connectedDevices = new Map();
-        this.bluetoothClassic = new BluetoothClassic();
-        this.bluetoothScanner = new BluetoothScanner((deviceId) => {
-            this.connectedDevices.delete(deviceId);
+        this.onDisconnect = onDisconnect;
+        this.bluetoothClassic = new BluetoothClassic((deviceId) => {
+            this.handleDisconnect(deviceId);
         });
+        this.bluetoothScanner = new BluetoothScanner((deviceId) => {
+            this.handleDisconnect(deviceId);
+        });
+    }
+
+    handleDisconnect(deviceId) {
+        this.connectedDevices.delete(deviceId);
+        if (this.onDisconnect) {
+            this.onDisconnect(deviceId);
+        }
     }
 
     async discoverDevices(filters = {}) {

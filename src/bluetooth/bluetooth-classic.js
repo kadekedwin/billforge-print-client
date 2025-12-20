@@ -3,9 +3,11 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 class BluetoothClassic {
-    constructor() {
+    constructor(onDisconnect = null) {
         this.devices = new Map();
         this.connections = new Map();
+        this.healthCheckIntervals = new Map();
+        this.onDisconnect = onDisconnect;
     }
 
     async discoverDevices() {
@@ -170,6 +172,7 @@ class BluetoothClassic {
             if (device) {
                 device.connected = true;
                 this.connections.set(address, { device, connectedAt: Date.now() });
+                this.startHealthMonitoring(address);
             }
 
             return { success: true, address };
@@ -214,6 +217,8 @@ class BluetoothClassic {
 
     async disconnect(address) {
         try {
+            this.stopHealthMonitoring(address);
+
             const platform = process.platform;
 
             if (platform === 'darwin') {
@@ -317,6 +322,118 @@ class BluetoothClassic {
 
     getAllDevices() {
         return Array.from(this.devices.values());
+    }
+
+    startHealthMonitoring(address) {
+        const platform = process.platform;
+
+        const interval = setInterval(async () => {
+            if (!this.connections.has(address)) {
+                this.stopHealthMonitoring(address);
+                return;
+            }
+
+            try {
+                let isConnected = false;
+
+                if (platform === 'darwin') {
+                    isConnected = await this.checkConnectionMacOS(address);
+                } else if (platform === 'linux') {
+                    isConnected = await this.checkConnectionLinux(address);
+                } else if (platform === 'win32') {
+                    isConnected = await this.checkConnectionWindows(address);
+                }
+
+                if (!isConnected) {
+                    this.handleDisconnect(address);
+                }
+            } catch (error) {
+                console.error(`Health check failed for ${address}:`, error.message);
+            }
+        }, 5000);
+
+        this.healthCheckIntervals.set(address, interval);
+    }
+
+    stopHealthMonitoring(address) {
+        const interval = this.healthCheckIntervals.get(address);
+        if (interval) {
+            clearInterval(interval);
+            this.healthCheckIntervals.delete(address);
+        }
+    }
+
+    handleDisconnect(address) {
+        this.stopHealthMonitoring(address);
+
+        const device = this.devices.get(address);
+        if (device) {
+            device.connected = false;
+        }
+
+        this.connections.delete(address);
+
+        if (this.onDisconnect) {
+            this.onDisconnect(`classic_${address}`);
+        }
+
+        console.log(`Device disconnected: ${address}`);
+    }
+
+    async checkConnectionMacOS(address) {
+        try {
+            const { stdout } = await execAsync('system_profiler SPBluetoothDataType -json');
+            const data = JSON.parse(stdout);
+
+            if (data.SPBluetoothDataType && data.SPBluetoothDataType[0]) {
+                const btData = data.SPBluetoothDataType[0];
+
+                if (btData.device_connected && Array.isArray(btData.device_connected)) {
+                    for (const deviceObj of btData.device_connected) {
+                        for (const [name, info] of Object.entries(deviceObj)) {
+                            if (info.device_address === address) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return false;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    async checkConnectionLinux(address) {
+        try {
+            const { stdout } = await execAsync(`bluetoothctl info ${address}`);
+            return stdout.includes('Connected: yes');
+        } catch (error) {
+            return false;
+        }
+    }
+
+    async checkConnectionWindows(address) {
+        try {
+            const script = `
+                Get-PnpDevice -InstanceId "${address}" | 
+                Where-Object {$_.Status -eq "OK"} | 
+                Select-Object Status | 
+                ConvertTo-Json
+            `;
+
+            const { stdout } = await execAsync(`powershell -Command "${script}"`);
+
+            if (!stdout || stdout.trim() === '') {
+                return false;
+            }
+
+            const data = JSON.parse(stdout);
+            return data && data.Status === 'OK';
+        } catch (error) {
+            return false;
+        }
     }
 }
 

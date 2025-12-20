@@ -9,6 +9,13 @@ class BluetoothScanner {
         this.healthCheckIntervals = new Map();
         this.scanning = false;
         this.onDisconnect = onDisconnect;
+
+        noble.on('stateChange', (state) => {
+            if (state !== 'poweredOn') {
+                console.log(`Bluetooth state changed to: ${state}`);
+                this.disconnectAll();
+            }
+        });
     }
 
     async startScan(duration = 5000) {
@@ -269,6 +276,17 @@ class BluetoothScanner {
             clearInterval(interval);
             this.healthCheckIntervals.delete(peripheralId);
         }
+    }
+
+    disconnectAll() {
+        // Disconnect all connected peripherals
+        const peripheralIds = Array.from(this.connectedPeripherals.keys());
+
+        peripheralIds.forEach((peripheralId) => {
+            this.handleDisconnect(peripheralId);
+        });
+
+        console.log(`Disconnected all BLE devices (${peripheralIds.length} devices)`);
     }
 }
 
