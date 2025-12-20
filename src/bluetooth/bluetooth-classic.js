@@ -35,14 +35,16 @@ class BluetoothClassic {
         try {
             const devices = [];
 
-            console.log('Starting active Bluetooth scan...');
             try {
                 await execAsync('blueutil --inquiry 5', { timeout: 6000 });
-            } catch (e) {
-                console.log('blueutil not available, using system_profiler only');
-            }
+            } catch (e) { }
 
             const { stdout } = await execAsync('system_profiler SPBluetoothDataType -json');
+
+            if (!stdout || stdout.trim() === '') {
+                return [];
+            }
+
             const data = JSON.parse(stdout);
 
             if (data.SPBluetoothDataType && data.SPBluetoothDataType[0]) {
@@ -79,7 +81,6 @@ class BluetoothClassic {
                 }
             }
 
-            console.log(`macOS discovery found ${devices.length} devices`);
             return devices;
         } catch (error) {
             throw new Error(`macOS discovery failed: ${error.message}`);
@@ -127,15 +128,27 @@ class BluetoothClassic {
       `;
 
             const { stdout } = await execAsync(`powershell -Command "${script}"`);
+
+            if (!stdout || stdout.trim() === '') {
+                return [];
+            }
+
             const data = JSON.parse(stdout);
+
+            if (!data) {
+                return [];
+            }
+
             const devices = Array.isArray(data) ? data : [data];
 
-            return devices.map(device => ({
-                name: device.FriendlyName,
-                address: device.InstanceId,
-                paired: true,
-                connected: false
-            }));
+            return devices
+                .filter(device => device && device.FriendlyName && device.InstanceId)
+                .map(device => ({
+                    name: device.FriendlyName,
+                    address: device.InstanceId,
+                    paired: true,
+                    connected: false
+                }));
         } catch (error) {
             throw new Error(`Windows discovery failed: ${error.message}`);
         }
@@ -176,9 +189,7 @@ class BluetoothClassic {
 
         try {
             await execAsync(`osascript -e '${script}'`);
-        } catch (error) {
-            console.log('AppleScript connection not available, device may already be connected');
-        }
+        } catch (error) { }
     }
 
     async connectLinux(address) {
@@ -188,7 +199,7 @@ class BluetoothClassic {
     async connectWindows(address) {
         const script = `
       Add-Type -AssemblyName System.Runtime.WindowsRuntime
-      $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation``1' })[0]
+      $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`\`1' })[0]
       Function Await($WinRtTask, $ResultType) {
         $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
         $netTask = $asTask.Invoke($null, @($WinRtTask))
@@ -225,17 +236,13 @@ class BluetoothClassic {
         }
     }
 
-    async disconnectMacOS(address) {
-        console.log('Disconnecting from device:', address);
-    }
+    async disconnectMacOS(address) { }
 
     async disconnectLinux(address) {
         await execAsync(`bluetoothctl disconnect ${address}`);
     }
 
-    async disconnectWindows(address) {
-        console.log('Disconnecting from device:', address);
-    }
+    async disconnectWindows(address) { }
 
     async processDataWithDelays(address, data) {
         const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
@@ -281,9 +288,7 @@ class BluetoothClassic {
             for (const chunk of chunks) {
                 if (chunk.type === 'data') {
                     totalBytesSent += chunk.buffer.length;
-                    console.log(`Sent ${chunk.buffer.length} bytes to ${address}`);
                 } else if (chunk.type === 'delay') {
-                    console.log(`Delaying ${chunk.duration}ms`);
                     await new Promise(resolve => setTimeout(resolve, chunk.duration));
                 }
             }

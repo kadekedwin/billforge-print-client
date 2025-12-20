@@ -5,6 +5,8 @@ class BluetoothScanner {
         this.discoveredDevices = new Map();
         this.peripherals = new Map();
         this.connectedPeripherals = new Map();
+        this.peripheralCharacteristics = new Map();
+        this.healthCheckIntervals = new Map();
         this.scanning = false;
         this.onDisconnect = onDisconnect;
     }
@@ -23,12 +25,10 @@ class BluetoothScanner {
                 };
                 this.discoveredDevices.set(peripheral.id, device);
                 this.peripherals.set(peripheral.id, peripheral);
-                console.log(`Discovered: ${device.name} (${device.address})`);
             };
 
             const onStateChange = (state) => {
                 if (state === 'poweredOn') {
-                    console.log('Starting BLE scan...');
                     noble.on('discover', onDiscover);
                     noble.startScanning([], true);
                     this.scanning = true;
@@ -37,7 +37,6 @@ class BluetoothScanner {
                         noble.stopScanning();
                         noble.removeListener('discover', onDiscover);
                         this.scanning = false;
-                        console.log(`Scan complete. Found ${this.discoveredDevices.size} devices`);
                         resolve(Array.from(this.discoveredDevices.values()));
                     }, duration);
                 } else {
@@ -65,40 +64,35 @@ class BluetoothScanner {
     }
 
     async connect(deviceId) {
+        const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
+        const peripheral = this.peripherals.get(peripheralId);
+
+        if (!peripheral) {
+            throw new Error('Device not found. Please discover devices first.');
+        }
+
+        if (this.connectedPeripherals.has(peripheralId)) {
+            return { success: true, message: 'Already connected' };
+        }
+
         return new Promise((resolve, reject) => {
-            const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
-
-            console.log(`Attempting to connect to device: ${deviceId} (peripheral ID: ${peripheralId})`);
-            console.log(`Available peripherals: ${Array.from(this.peripherals.keys()).join(', ')}`);
-
-            const peripheral = this.peripherals.get(peripheralId);
-            if (!peripheral) {
-                console.error(`Peripheral not found for ID: ${peripheralId}`);
-                console.error(`Stored peripheral IDs: ${JSON.stringify(Array.from(this.peripherals.keys()))}`);
-                return reject(new Error('Device not found. Please discover devices first.'));
-            }
-
-            if (this.connectedPeripherals.has(peripheralId)) {
-                return resolve({ success: true, message: 'Already connected' });
-            }
-
-            console.log(`Connecting to BLE device: ${peripheral.advertisement.localName || peripheralId}`);
-
             peripheral.connect((error) => {
                 if (error) {
-                    console.error('BLE connection error:', error);
                     return reject(new Error(`Failed to connect: ${error.message}`));
                 }
 
-                console.log(`Successfully connected to ${peripheral.advertisement.localName || peripheralId}`);
                 this.connectedPeripherals.set(peripheralId, peripheral);
 
-                peripheral.once('disconnect', () => {
-                    console.log(`Device ${peripheralId} disconnected`);
-                    this.connectedPeripherals.delete(peripheralId);
-                    if (this.onDisconnect) {
-                        this.onDisconnect(`ble_${peripheralId}`);
+                peripheral.discoverAllServicesAndCharacteristics((err, services, characteristics) => {
+                    if (!err && characteristics) {
+                        this.peripheralCharacteristics.set(peripheralId, characteristics);
                     }
+                });
+
+                this.startHealthMonitoring(peripheralId, peripheral);
+
+                peripheral.once('disconnect', () => {
+                    this.handleDisconnect(peripheralId);
                 });
 
                 resolve({ success: true, deviceId: peripheralId });
@@ -107,26 +101,35 @@ class BluetoothScanner {
     }
 
     async disconnect(deviceId) {
+        const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
+        const peripheral = this.connectedPeripherals.get(peripheralId);
+
+        if (!peripheral) {
+            throw new Error('Device not connected');
+        }
+
+        this.stopHealthMonitoring(peripheralId);
+
         return new Promise((resolve, reject) => {
-            const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
-            const peripheral = this.connectedPeripherals.get(peripheralId);
-            if (!peripheral) {
-                return reject(new Error('Device not connected'));
-            }
-
-            console.log(`Disconnecting from BLE device: ${peripheralId}`);
-
             peripheral.disconnect((error) => {
                 if (error) {
-                    console.error('BLE disconnection error:', error);
                     return reject(new Error(`Failed to disconnect: ${error.message}`));
                 }
 
                 this.connectedPeripherals.delete(peripheralId);
-                console.log(`Successfully disconnected from ${peripheralId}`);
                 resolve({ success: true, deviceId: peripheralId });
             });
         });
+    }
+
+    handleDisconnect(peripheralId) {
+        this.stopHealthMonitoring(peripheralId);
+        this.connectedPeripherals.delete(peripheralId);
+        this.peripheralCharacteristics.delete(peripheralId);
+
+        if (this.onDisconnect) {
+            this.onDisconnect(`ble_${peripheralId}`);
+        }
     }
 
     async processDataWithDelays(data) {
@@ -155,7 +158,6 @@ class BluetoothScanner {
             }
         }
 
-        // Add remaining data
         if (currentChunk.length > 0) {
             chunks.push({ type: 'data', buffer: Buffer.from(currentChunk) });
         }
@@ -166,42 +168,48 @@ class BluetoothScanner {
     async sendData(deviceId, data) {
         const peripheralId = deviceId.startsWith('ble_') ? deviceId.substring(4) : deviceId;
         const peripheral = this.connectedPeripherals.get(peripheralId);
+
         if (!peripheral) {
             throw new Error('Device not connected');
         }
 
+        let characteristics = this.peripheralCharacteristics.get(peripheralId);
+
+        if (!characteristics) {
+            characteristics = await new Promise((resolve, reject) => {
+                peripheral.discoverAllServicesAndCharacteristics((error, services, chars) => {
+                    if (error) {
+                        return reject(new Error(`Failed to discover services: ${error.message}`));
+                    }
+                    this.peripheralCharacteristics.set(peripheralId, chars);
+                    resolve(chars);
+                });
+            });
+        }
+
+        const writableChar = characteristics.find(char =>
+            char.properties.includes('write') || char.properties.includes('writeWithoutResponse')
+        );
+
+        if (!writableChar) {
+            throw new Error('No writable characteristic found');
+        }
+
+        const useWriteWithoutResponse = writableChar.properties.includes('writeWithoutResponse');
         const chunks = await this.processDataWithDelays(data);
         let totalBytesSent = 0;
 
         for (const chunk of chunks) {
             if (chunk.type === 'delay') {
-                console.log(`Delaying ${chunk.duration}ms`);
                 await new Promise(resolve => setTimeout(resolve, chunk.duration));
             } else if (chunk.type === 'data') {
                 await new Promise((resolve, reject) => {
-                    peripheral.discoverAllServicesAndCharacteristics((error, services, characteristics) => {
+                    writableChar.write(chunk.buffer, useWriteWithoutResponse, (error) => {
                         if (error) {
-                            return reject(new Error(`Failed to discover services: ${error.message}`));
+                            return reject(new Error(`Failed to write data: ${error.message}`));
                         }
-
-                        const writableChar = characteristics.find(char =>
-                            char.properties.includes('write') || char.properties.includes('writeWithoutResponse')
-                        );
-
-                        if (!writableChar) {
-                            return reject(new Error('No writable characteristic found'));
-                        }
-
-                        const useWriteWithoutResponse = writableChar.properties.includes('writeWithoutResponse');
-
-                        writableChar.write(chunk.buffer, useWriteWithoutResponse, (error) => {
-                            if (error) {
-                                return reject(new Error(`Failed to write data: ${error.message}`));
-                            }
-                            totalBytesSent += chunk.buffer.length;
-                            console.log(`Sent ${chunk.buffer.length} bytes to ${peripheralId}`);
-                            resolve();
-                        });
+                        totalBytesSent += chunk.buffer.length;
+                        resolve();
                     });
                 });
             }
@@ -220,6 +228,47 @@ class BluetoothScanner {
             });
         });
         return devices;
+    }
+
+    startHealthMonitoring(peripheralId, peripheral) {
+        let failureCount = 0;
+
+        const interval = setInterval(() => {
+            if (!this.connectedPeripherals.has(peripheralId)) {
+                this.stopHealthMonitoring(peripheralId);
+                return;
+            }
+
+            peripheral.updateRssi((error, rssi) => {
+                if (error) {
+                    failureCount++;
+
+                    if (failureCount >= 2) {
+                        clearInterval(interval);
+                        this.healthCheckIntervals.delete(peripheralId);
+
+                        this.connectedPeripherals.delete(peripheralId);
+                        this.peripheralCharacteristics.delete(peripheralId);
+
+                        if (this.onDisconnect) {
+                            this.onDisconnect(`ble_${peripheralId}`);
+                        }
+                    }
+                } else {
+                    failureCount = 0;
+                }
+            });
+        }, 3000);
+
+        this.healthCheckIntervals.set(peripheralId, interval);
+    }
+
+    stopHealthMonitoring(peripheralId) {
+        const interval = this.healthCheckIntervals.get(peripheralId);
+        if (interval) {
+            clearInterval(interval);
+            this.healthCheckIntervals.delete(peripheralId);
+        }
     }
 }
 

@@ -8,7 +8,6 @@ class BluetoothService {
         this.connectedDevices = new Map();
         this.bluetoothClassic = new BluetoothClassic();
         this.bluetoothScanner = new BluetoothScanner((deviceId) => {
-            console.log(`Removing disconnected device: ${deviceId}`);
             this.connectedDevices.delete(deviceId);
         });
     }
@@ -17,9 +16,7 @@ class BluetoothService {
         try {
             const devices = [];
 
-            console.log('Starting Bluetooth Classic discovery...');
             const classicDevices = await this.bluetoothClassic.discoverDevices();
-            console.log(`Found ${classicDevices.length} classic devices`);
 
             classicDevices.forEach(device => {
                 const id = `classic_${device.address}`;
@@ -33,13 +30,11 @@ class BluetoothService {
                 });
             });
 
-            console.log('Starting BLE scan for nearby devices...');
             try {
                 const bleDevices = await this.bluetoothScanner.startScan(5000);
-                console.log(`Found ${bleDevices.length} BLE devices`);
 
                 bleDevices.forEach(device => {
-                    const id = `ble_${device.address}`;
+                    const id = `ble_${device.id}`;
                     this.bleDevices.set(id, {
                         id,
                         name: device.name,
@@ -48,9 +43,7 @@ class BluetoothService {
                         rssi: device.rssi
                     });
                 });
-            } catch (error) {
-                console.error('BLE scan error:', error.message);
-            }
+            } catch (error) { }
 
             const ignoreUnknown = filters.ignoreUnknown || false;
 
@@ -84,11 +77,8 @@ class BluetoothService {
                 });
             });
 
-            const filteredCount = ignoreUnknown ? ` (${devices.length} after filtering)` : '';
-            console.log(`Returning ${devices.length} total devices${filteredCount}`);
             return { success: true, devices };
         } catch (error) {
-            console.error('Discovery error:', error);
             return { success: false, error: error.message };
         }
     }
