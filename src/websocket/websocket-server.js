@@ -26,41 +26,68 @@ class WebSocketServer {
         console.log(`Broadcasted disconnect event for device: ${deviceId}`);
     }
 
-    start() {
-        this.wss = new WebSocket.Server({
-            host: '127.0.0.1',
-            port: this.port
-        });
+    async start(maxRetries = 10) {
+        let attempts = 0;
 
-        this.wss.on('connection', (ws) => {
-            console.log('Client connected');
-            this.clients.add(ws);
+        while (attempts < maxRetries) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const server = new WebSocket.Server({
+                        host: '127.0.0.1',
+                        port: this.port
+                    }, () => {
+                        resolve();
+                    });
 
-            ws.on('message', async (message) => {
-                try {
-                    const data = JSON.parse(message);
-                    const response = await this.handleMessage(data);
-                    ws.send(JSON.stringify(response));
-                } catch (error) {
+                    server.on('error', (error) => {
+                        reject(error);
+                    });
+
+                    this.wss = server;
+                });
+
+                this.wss.on('connection', (ws) => {
+                    console.log('Client connected');
+                    this.clients.add(ws);
+
+                    ws.on('message', async (message) => {
+                        try {
+                            const data = JSON.parse(message);
+                            const response = await this.handleMessage(data);
+                            ws.send(JSON.stringify(response));
+                        } catch (error) {
+                            ws.send(JSON.stringify({
+                                type: 'error',
+                                error: error.message
+                            }));
+                        }
+                    });
+
+                    ws.on('close', () => {
+                        console.log('Client disconnected');
+                        this.clients.delete(ws);
+                    });
+
                     ws.send(JSON.stringify({
-                        type: 'error',
-                        error: error.message
+                        type: 'connected',
+                        message: 'WebSocket connected successfully'
                     }));
+                });
+
+                console.log(`WebSocket server running on port ${this.port}`);
+                return this.port;
+            } catch (error) {
+                if (error.code === 'EADDRINUSE') {
+                    console.log(`Port ${this.port} is in use, trying ${this.port + 1}...`);
+                    this.port++;
+                    attempts++;
+                } else {
+                    throw error;
                 }
-            });
+            }
+        }
 
-            ws.on('close', () => {
-                console.log('Client disconnected');
-                this.clients.delete(ws);
-            });
-
-            ws.send(JSON.stringify({
-                type: 'connected',
-                message: 'WebSocket connected successfully'
-            }));
-        });
-
-        console.log(`WebSocket server running on port ${this.port}`);
+        throw new Error(`Failed to start server after ${maxRetries} attempts`);
     }
 
     async handleMessage(data) {

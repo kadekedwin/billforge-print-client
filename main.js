@@ -5,6 +5,7 @@ const WebSocketServer = require('./src/websocket/websocket-server');
 
 let wsServer;
 let tray = null;
+let actualPort = 42123;
 
 let isServerRunning = true;
 
@@ -18,8 +19,16 @@ function toggleServer() {
     }
   } else {
     if (wsServer) {
-      wsServer.start();
-      isServerRunning = true;
+      wsServer.start().then((port) => {
+        actualPort = port;
+        isServerRunning = true;
+        if (tray) {
+          tray.setContextMenu(createTrayMenu());
+        }
+      }).catch((error) => {
+        console.error('Failed to start server:', error);
+      });
+      return;
     }
   }
   if (tray) {
@@ -28,8 +37,7 @@ function toggleServer() {
 }
 
 function createTrayMenu() {
-  const port = 42123;
-  const wsUrl = `ws://127.0.0.1:${port}`;
+  const wsUrl = `ws://127.0.0.1:${actualPort}`;
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -54,7 +62,7 @@ function createTrayMenu() {
       enabled: false
     },
     {
-      label: `Port: ${port}`,
+      label: `Port: ${actualPort}`,
       enabled: false
     },
     { type: 'separator' },
@@ -97,18 +105,18 @@ function createTray() {
   }, 5000);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (process.platform === 'darwin') {
     app.dock.hide();
   }
   wsServer = new WebSocketServer(42123);
-  wsServer.start();
+  actualPort = await wsServer.start();
   isServerRunning = true;
 
   createTray();
 
   console.log('BillForge Print Client running in system tray');
-  console.log('WebSocket server: ws://127.0.0.1:42123');
+  console.log(`WebSocket server: ws://127.0.0.1:${actualPort}`);
 });
 
 app.on('window-all-closed', () => {
