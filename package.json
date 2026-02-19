@@ -28,7 +28,11 @@
     },
     "linux": {
       "icon": "assets/icon.png",
-      "target": ["AppImage", "deb", "rpm"]
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ]
     }
   },
   "keywords": [
@@ -41,7 +45,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^39.2.7",
+    "electron": "^39.6.0",
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
